@@ -4,58 +4,118 @@ namespace SystemSyncEngine.Worker;
 
 public sealed class Worker : BackgroundService
 {
+    private const string SyncName = "CustomerSync";
+    private static readonly DateTime DefaultSinceUtc = DateTime.UtcNow.AddDays(-1);
+
     private readonly CustomerSyncService _customerSyncService;
     private readonly IDestinationRepository _destinationRepository;
+    private readonly ISyncStateRepository _syncStateRepository;
+    private readonly IHostApplicationLifetime _applicationLifetime;
     private readonly ILogger<Worker> _logger;
 
     public Worker(
         CustomerSyncService customerSyncService,
         IDestinationRepository destinationRepository,
+        ISyncStateRepository syncStateRepository,
+        IHostApplicationLifetime applicationLifetime,
         ILogger<Worker> logger)
     {
         _customerSyncService = customerSyncService;
         _destinationRepository = destinationRepository;
+        _syncStateRepository = syncStateRepository;
+        _applicationLifetime = applicationLifetime;
         _logger = logger;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (_destinationRepository is SqliteDestinationRepository sqliteRepository)
+        try
         {
-            await sqliteRepository.InitializeAsync(stoppingToken);
+            await InitializeStorageAsync(stoppingToken);
+
+            var lastSuccessfulSyncUtc =
+                await _syncStateRepository.GetLastSuccessfulSyncUtcAsync(
+                    SyncName,
+                    stoppingToken);
+
+            var sinceUtc = lastSuccessfulSyncUtc ?? DefaultSinceUtc;
+
+            _logger.LogInformation(
+                "Starting {SyncName} for records updated since {SinceUtc:O}.",
+                SyncName,
+                sinceUtc);
+
+            var syncStartedAtUtc = DateTime.UtcNow;
+
+            var result = await _customerSyncService.SyncCustomersAsync(
+                sinceUtc,
+                stoppingToken);
+
+            _logger.LogInformation(
+                "{SyncName} completed. Read: {RecordsRead}, Upserted: {RecordsWritten}, Skipped: {RecordsSkipped}, Failed: {RecordsFailed}, Succeeded: {Succeeded}",
+                SyncName,
+                result.RecordsRead,
+                result.RecordsWritten,
+                result.RecordsSkipped,
+                result.RecordsFailed,
+                result.Succeeded);
+
+            if (result.Succeeded)
+            {
+                await _syncStateRepository.SaveLastSuccessfulSyncUtcAsync(
+                    SyncName,
+                    syncStartedAtUtc,
+                    stoppingToken);
+            }
+            else
+            {
+                _logger.LogWarning(
+                    "Checkpoint was not updated because {SyncName} had failures.",
+                    SyncName);
+            }
+
+            await LogSyncedCustomersAsync(stoppingToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unhandled error while running sync worker.");
+        }
+        finally
+        {
+            _applicationLifetime.StopApplication();
+        }
+    }
+
+    private async Task InitializeStorageAsync(CancellationToken cancellationToken)
+    {
+        if (_destinationRepository is SqliteDestinationRepository sqliteDestinationRepository)
+        {
+            await sqliteDestinationRepository.InitializeAsync(cancellationToken);
         }
 
-        var sinceUtc = DateTime.UtcNow.AddHours(-1);
-
-        _logger.LogInformation(
-            "Starting customer sync for records updated since {SinceUtc}.",
-            sinceUtc);
-
-        var result = await _customerSyncService.SyncCustomersAsync(
-            sinceUtc,
-            stoppingToken);
-
-        _logger.LogInformation(
-            "Customer sync completed. Read: {RecordsRead}, Written: {RecordsWritten}, Skipped: {RecordsSkipped}, Failed: {RecordsFailed}, Succeeded: {Succeeded}",
-            result.RecordsRead,
-            result.RecordsWritten,
-            result.RecordsSkipped,
-            result.RecordsFailed,
-            result.Succeeded);
-
-        if (_destinationRepository is SqliteDestinationRepository repository)
+        if (_syncStateRepository is SqliteSyncStateRepository sqliteSyncStateRepository)
         {
-            var syncedCustomers = await repository.GetAllCustomersAsync(stoppingToken);
+            await sqliteSyncStateRepository.InitializeAsync(cancellationToken);
+        }
+    }
 
-            foreach (var customer in syncedCustomers)
-            {
-                _logger.LogInformation(
-                    "Database customer: {ExternalId} | {FullName} | {Email} | {PhoneNumber}",
-                    customer.ExternalId,
-                    customer.FullName,
-                    customer.Email,
-                    customer.PhoneNumber);
-            }
+    private async Task LogSyncedCustomersAsync(CancellationToken cancellationToken)
+    {
+        if (_destinationRepository is not SqliteDestinationRepository repository)
+        {
+            return;
+        }
+
+        var syncedCustomers = await repository.GetAllCustomersAsync(cancellationToken);
+
+        foreach (var customer in syncedCustomers)
+        {
+            _logger.LogInformation(
+                "Database customer: {ExternalId} | {FullName} | {Email} | {PhoneNumber}",
+                customer.ExternalId,
+                customer.FullName,
+                customer.Email,
+                customer.PhoneNumber);
         }
     }
 }

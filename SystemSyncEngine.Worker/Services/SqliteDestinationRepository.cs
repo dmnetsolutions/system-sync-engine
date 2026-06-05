@@ -125,8 +125,16 @@ public sealed class SqliteDestinationRepository : IDestinationRepository
                 FullName = reader.GetString(1),
                 Email = reader.GetString(2),
                 PhoneNumber = reader.IsDBNull(3) ? null : reader.GetString(3),
-                SourceUpdatedAtUtc = DateTime.Parse(reader.GetString(4)),
-                SyncedAtUtc = DateTime.Parse(reader.GetString(5))
+                SourceUpdatedAtUtc = DateTime.Parse(
+                                        reader.GetString(4),
+                                        null,
+                                        System.Globalization.DateTimeStyles.RoundtripKind
+                                        ).ToUniversalTime(),
+                SyncedAtUtc = DateTime.Parse(
+                                reader.GetString(5),
+                                null,
+                                System.Globalization.DateTimeStyles.RoundtripKind
+                                ).ToUniversalTime()
             });
         }
 
