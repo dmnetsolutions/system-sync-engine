@@ -7,6 +7,8 @@ public sealed class FakeSourceSystemClient : ISourceSystemClient
     private static readonly DateTime SampleDataAnchorUtc =
         new(2026, 06, 05, 15, 00, 00, DateTimeKind.Utc);
 
+    private static bool _hasSimulatedTransientFailure;
+
     private static readonly IReadOnlyList<SourceCustomer> Customers =
     [
         new SourceCustomer
@@ -47,6 +49,12 @@ public sealed class FakeSourceSystemClient : ISourceSystemClient
         DateTime sinceUtc,
         CancellationToken cancellationToken)
     {
+        if (!_hasSimulatedTransientFailure)
+        {
+            _hasSimulatedTransientFailure = true;
+            throw new InvalidOperationException("Simulated transient source system failure.");
+        }
+
         var updatedCustomers = Customers
             .Where(customer => customer.UpdatedAtUtc >= sinceUtc)
             .OrderBy(customer => customer.UpdatedAtUtc)
