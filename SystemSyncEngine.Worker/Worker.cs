@@ -1,3 +1,4 @@
+using SystemSyncEngine.Worker.Models;
 using SystemSyncEngine.Worker.Services;
 
 namespace SystemSyncEngine.Worker;
@@ -6,7 +7,7 @@ public sealed class Worker : BackgroundService
 {
     private const string SyncName = "CustomerSync";
     private static readonly DateTime DefaultSinceUtc = DateTime.UtcNow.AddDays(-1);
-
+    private readonly ISyncRunRepository _syncRunRepository;
     private readonly CustomerSyncService _customerSyncService;
     private readonly IDestinationRepository _destinationRepository;
     private readonly ISyncStateRepository _syncStateRepository;
@@ -17,11 +18,13 @@ public sealed class Worker : BackgroundService
         CustomerSyncService customerSyncService,
         IDestinationRepository destinationRepository,
         ISyncStateRepository syncStateRepository,
+        ISyncRunRepository syncRunRepository,
         IHostApplicationLifetime applicationLifetime,
         ILogger<Worker> logger)
     {
         _customerSyncService = customerSyncService;
         _destinationRepository = destinationRepository;
+        _syncRunRepository = syncRunRepository;
         _syncStateRepository = syncStateRepository;
         _applicationLifetime = applicationLifetime;
         _logger = logger;
@@ -29,6 +32,10 @@ public sealed class Worker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        var syncStartedAtUtc = DateTime.UtcNow;
+        SyncResult? result = null;
+        string? unhandledErrorMessage = null;
+
         try
         {
             await InitializeStorageAsync(stoppingToken);
@@ -45,17 +52,15 @@ public sealed class Worker : BackgroundService
                 SyncName,
                 sinceUtc);
 
-            var syncStartedAtUtc = DateTime.UtcNow;
-
-            var result = await _customerSyncService.SyncCustomersAsync(
+            result = await _customerSyncService.SyncCustomersAsync(
                 sinceUtc,
                 stoppingToken);
 
             _logger.LogInformation(
-                "{SyncName} completed. Read: {RecordsRead}, Upserted: {RecordsWritten}, Skipped: {RecordsSkipped}, Failed: {RecordsFailed}, Succeeded: {Succeeded}",
+                "{SyncName} completed. Read: {RecordsRead}, Upserted: {RecordsUpserted}, Skipped: {RecordsSkipped}, Failed: {RecordsFailed}, Succeeded: {Succeeded}",
                 SyncName,
                 result.RecordsRead,
-                result.RecordsWritten,
+                result.RecordsUpserted,
                 result.RecordsSkipped,
                 result.RecordsFailed,
                 result.Succeeded);
@@ -78,16 +83,29 @@ public sealed class Worker : BackgroundService
         }
         catch (Exception ex)
         {
+            unhandledErrorMessage = ex.Message;
             _logger.LogError(ex, "Unhandled error while running sync worker.");
         }
         finally
         {
+            await SaveRunHistoryAsync(
+                syncStartedAtUtc,
+                DateTime.UtcNow,
+                result,
+                unhandledErrorMessage,
+                stoppingToken);
+
             _applicationLifetime.StopApplication();
         }
     }
 
     private async Task InitializeStorageAsync(CancellationToken cancellationToken)
     {
+        if (_syncRunRepository is SqliteSyncRunRepository sqliteSyncRunRepository)
+        {
+            await sqliteSyncRunRepository.InitializeAsync(cancellationToken);
+        }
+
         if (_destinationRepository is SqliteDestinationRepository sqliteDestinationRepository)
         {
             await sqliteDestinationRepository.InitializeAsync(cancellationToken);
@@ -117,5 +135,28 @@ public sealed class Worker : BackgroundService
                 customer.Email,
                 customer.PhoneNumber);
         }
+    }
+
+    private async Task SaveRunHistoryAsync(
+    DateTime startedAtUtc,
+    DateTime completedAtUtc,
+    SyncResult? result,
+    string? unhandledErrorMessage,
+    CancellationToken cancellationToken)
+    {
+        await _syncRunRepository.SaveRunAsync(
+            new SyncRunRecord
+            {
+                SyncName = SyncName,
+                StartedAtUtc = startedAtUtc,
+                CompletedAtUtc = completedAtUtc,
+                RecordsRead = result?.RecordsRead ?? 0,
+                RecordsUpserted = result?.RecordsUpserted ?? 0,
+                RecordsSkipped = result?.RecordsSkipped ?? 0,
+                RecordsFailed = result?.RecordsFailed ?? 0,
+                Succeeded = result?.Succeeded == true && unhandledErrorMessage is null,
+                ErrorMessage = unhandledErrorMessage
+            },
+            cancellationToken);
     }
 }

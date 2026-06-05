@@ -81,7 +81,7 @@ public sealed class CustomerSyncService
         return new SyncResult
         {
             RecordsRead = sourceCustomers.Count,
-            RecordsWritten = recordsWritten,
+            RecordsUpserted = recordsWritten,
             RecordsSkipped = recordsSkipped,
             RecordsFailed = recordsFailed
         };

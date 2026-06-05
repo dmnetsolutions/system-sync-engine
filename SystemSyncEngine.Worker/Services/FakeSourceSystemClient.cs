@@ -49,11 +49,12 @@ public sealed class FakeSourceSystemClient : ISourceSystemClient
         DateTime sinceUtc,
         CancellationToken cancellationToken)
     {
-        if (!_hasSimulatedTransientFailure)
-        {
-            _hasSimulatedTransientFailure = true;
-            throw new InvalidOperationException("Simulated transient source system failure.");
-        }
+        // Uncomment in order to simulate a transient failure on the first attempt to retrieve updated customers.
+        //if (!_hasSimulatedTransientFailure)
+        //{
+        //    _hasSimulatedTransientFailure = true;
+        //    throw new InvalidOperationException("Simulated transient source system failure.");
+        //}
 
         var updatedCustomers = Customers
             .Where(customer => customer.UpdatedAtUtc >= sinceUtc)
