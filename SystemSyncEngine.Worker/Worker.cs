@@ -20,6 +20,11 @@ public sealed class Worker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        if (_destinationRepository is SqliteDestinationRepository sqliteRepository)
+        {
+            await sqliteRepository.InitializeAsync(stoppingToken);
+        }
+
         var sinceUtc = DateTime.UtcNow.AddHours(-1);
 
         _logger.LogInformation(
@@ -38,14 +43,14 @@ public sealed class Worker : BackgroundService
             result.RecordsFailed,
             result.Succeeded);
 
-        if (_destinationRepository is InMemoryDestinationRepository inMemoryRepository)
+        if (_destinationRepository is SqliteDestinationRepository repository)
         {
-            var syncedCustomers = inMemoryRepository.GetAllCustomers();
+            var syncedCustomers = await repository.GetAllCustomersAsync(stoppingToken);
 
             foreach (var customer in syncedCustomers)
             {
                 _logger.LogInformation(
-                    "Synced customer: {ExternalId} | {FullName} | {Email} | {PhoneNumber}",
+                    "Database customer: {ExternalId} | {FullName} | {Email} | {PhoneNumber}",
                     customer.ExternalId,
                     customer.FullName,
                     customer.Email,

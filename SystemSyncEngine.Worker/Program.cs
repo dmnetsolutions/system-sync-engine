@@ -6,7 +6,7 @@ var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddHostedService<Worker>();
 
 builder.Services.AddSingleton<ISourceSystemClient, FakeSourceSystemClient>();
-builder.Services.AddSingleton<IDestinationRepository, InMemoryDestinationRepository>();
+builder.Services.AddSingleton<IDestinationRepository, SqliteDestinationRepository>();
 builder.Services.AddSingleton<CustomerSyncService>();
 
 var host = builder.Build();
