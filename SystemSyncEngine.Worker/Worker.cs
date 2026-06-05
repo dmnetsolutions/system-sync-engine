@@ -1,12 +1,13 @@
 using SystemSyncEngine.Worker.Models;
 using SystemSyncEngine.Worker.Services;
+using Microsoft.Extensions.Options;
+using SystemSyncEngine.Worker.Options;
 
 namespace SystemSyncEngine.Worker;
 
 public sealed class Worker : BackgroundService
 {
-    private const string SyncName = "CustomerSync";
-    private static readonly DateTime DefaultSinceUtc = DateTime.UtcNow.AddDays(-1);
+    private readonly SyncEngineOptions _options;
     private readonly ISyncRunRepository _syncRunRepository;
     private readonly CustomerSyncService _customerSyncService;
     private readonly IDestinationRepository _destinationRepository;
@@ -20,6 +21,7 @@ public sealed class Worker : BackgroundService
         ISyncStateRepository syncStateRepository,
         ISyncRunRepository syncRunRepository,
         IHostApplicationLifetime applicationLifetime,
+        IOptions<SyncEngineOptions> options,
         ILogger<Worker> logger)
     {
         _customerSyncService = customerSyncService;
@@ -27,6 +29,7 @@ public sealed class Worker : BackgroundService
         _syncRunRepository = syncRunRepository;
         _syncStateRepository = syncStateRepository;
         _applicationLifetime = applicationLifetime;
+        _options = options.Value;
         _logger = logger;
     }
 
@@ -42,14 +45,14 @@ public sealed class Worker : BackgroundService
 
             var lastSuccessfulSyncUtc =
                 await _syncStateRepository.GetLastSuccessfulSyncUtcAsync(
-                    SyncName,
+                    _options.SyncName,
                     stoppingToken);
 
-            var sinceUtc = lastSuccessfulSyncUtc ?? DefaultSinceUtc;
+            var sinceUtc = lastSuccessfulSyncUtc ?? DateTime.UtcNow.AddHours(-_options.DefaultLookbackHours);
 
             _logger.LogInformation(
                 "Starting {SyncName} for records updated since {SinceUtc:O}.",
-                SyncName,
+                _options.SyncName,
                 sinceUtc);
 
             result = await _customerSyncService.SyncCustomersAsync(
@@ -58,7 +61,7 @@ public sealed class Worker : BackgroundService
 
             _logger.LogInformation(
                 "{SyncName} completed. Read: {RecordsRead}, Upserted: {RecordsUpserted}, Skipped: {RecordsSkipped}, Failed: {RecordsFailed}, Succeeded: {Succeeded}",
-                SyncName,
+                _options.SyncName,
                 result.RecordsRead,
                 result.RecordsUpserted,
                 result.RecordsSkipped,
@@ -68,7 +71,7 @@ public sealed class Worker : BackgroundService
             if (result.Succeeded)
             {
                 await _syncStateRepository.SaveLastSuccessfulSyncUtcAsync(
-                    SyncName,
+                    _options.SyncName,
                     syncStartedAtUtc,
                     stoppingToken);
             }
@@ -76,10 +79,13 @@ public sealed class Worker : BackgroundService
             {
                 _logger.LogWarning(
                     "Checkpoint was not updated because {SyncName} had failures.",
-                    SyncName);
+                    _options.SyncName);
             }
 
-            await LogSyncedCustomersAsync(stoppingToken);
+            if (_options.LogSyncedCustomers)
+            {
+                await LogSyncedCustomersAsync(stoppingToken);
+            }
         }
         catch (Exception ex)
         {
@@ -147,7 +153,7 @@ public sealed class Worker : BackgroundService
         await _syncRunRepository.SaveRunAsync(
             new SyncRunRecord
             {
-                SyncName = SyncName,
+                SyncName = _options.SyncName,
                 StartedAtUtc = startedAtUtc,
                 CompletedAtUtc = completedAtUtc,
                 RecordsRead = result?.RecordsRead ?? 0,

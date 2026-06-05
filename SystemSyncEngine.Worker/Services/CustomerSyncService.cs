@@ -1,4 +1,6 @@
 ﻿using SystemSyncEngine.Worker.Models;
+using Microsoft.Extensions.Options;
+using SystemSyncEngine.Worker.Options;
 
 namespace SystemSyncEngine.Worker.Services;
 
@@ -6,6 +8,7 @@ public sealed class CustomerSyncService
 {
     private readonly ISourceSystemClient _sourceClient;
     private readonly IDestinationRepository _destinationRepository;
+    private readonly SyncEngineOptions _options;
     private readonly ILogger<CustomerSyncService> _logger;
     private readonly IRetryPolicy _retryPolicy;
 
@@ -14,12 +17,14 @@ public sealed class CustomerSyncService
     IDestinationRepository destinationRepository,
    // ISyncErrorRepository syncErrorRepository,
     IRetryPolicy retryPolicy,
+    IOptions<SyncEngineOptions> options,
     ILogger<CustomerSyncService> logger)
     {
         _sourceClient = sourceClient;
         _destinationRepository = destinationRepository;
      //   _syncErrorRepository = syncErrorRepository;
         _retryPolicy = retryPolicy;
+        _options = options.Value;
         _logger = logger;
     }
 

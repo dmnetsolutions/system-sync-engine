@@ -1,13 +1,18 @@
-﻿namespace SystemSyncEngine.Worker.Services;
+﻿using Microsoft.Extensions.Options;
+using SystemSyncEngine.Worker.Options;
+
+namespace SystemSyncEngine.Worker.Services;
 
 public sealed class SimpleRetryPolicy : IRetryPolicy
 {
+    private readonly RetryOptions _options;
     private readonly ILogger<SimpleRetryPolicy> _logger;
 
-    private const int MaxAttempts = 3;
-
-    public SimpleRetryPolicy(ILogger<SimpleRetryPolicy> logger)
+    public SimpleRetryPolicy(
+        IOptions<RetryOptions> options,
+        ILogger<SimpleRetryPolicy> logger)
     {
+        _options = options.Value;
         _logger = logger;
     }
 
@@ -31,22 +36,23 @@ public sealed class SimpleRetryPolicy : IRetryPolicy
         string operationName,
         CancellationToken cancellationToken)
     {
-        for (var attempt = 1; attempt <= MaxAttempts; attempt++)
+        for (var attempt = 1; attempt <= _options.MaxAttempts; attempt++)
         {
             try
             {
                 return await operation(cancellationToken);
             }
-            catch (Exception ex) when (attempt < MaxAttempts)
+            catch (Exception ex) when (attempt < _options.MaxAttempts)
             {
-                var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt));
+                var delay = TimeSpan.FromSeconds(
+                    _options.BaseDelaySeconds * Math.Pow(2, attempt - 1));
 
                 _logger.LogWarning(
                     ex,
                     "Operation {OperationName} failed on attempt {Attempt}/{MaxAttempts}. Retrying in {DelaySeconds} seconds.",
                     operationName,
                     attempt,
-                    MaxAttempts,
+                    _options.MaxAttempts,
                     delay.TotalSeconds);
 
                 await Task.Delay(delay, cancellationToken);
