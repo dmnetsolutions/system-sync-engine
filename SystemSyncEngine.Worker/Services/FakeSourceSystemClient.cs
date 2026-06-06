@@ -7,7 +7,7 @@ public sealed class FakeSourceSystemClient : ISourceSystemClient
     private static readonly DateTime SampleDataAnchorUtc =
         new(2026, 06, 05, 15, 00, 00, DateTimeKind.Utc);
 
-    private static bool _hasSimulatedTransientFailure;
+    //private static bool _hasSimulatedTransientFailure;
 
     private static readonly IReadOnlyList<SourceCustomer> Customers =
     [

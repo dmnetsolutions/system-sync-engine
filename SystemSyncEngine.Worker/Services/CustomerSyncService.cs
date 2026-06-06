@@ -9,20 +9,21 @@ public sealed class CustomerSyncService
     private readonly ISourceSystemClient _sourceClient;
     private readonly IDestinationRepository _destinationRepository;
     private readonly SyncEngineOptions _options;
+    private readonly ISyncErrorRepository _syncErrorRepository;
     private readonly ILogger<CustomerSyncService> _logger;
     private readonly IRetryPolicy _retryPolicy;
 
     public CustomerSyncService(
     ISourceSystemClient sourceClient,
     IDestinationRepository destinationRepository,
-   // ISyncErrorRepository syncErrorRepository,
+    ISyncErrorRepository syncErrorRepository,
     IRetryPolicy retryPolicy,
     IOptions<SyncEngineOptions> options,
     ILogger<CustomerSyncService> logger)
     {
         _sourceClient = sourceClient;
         _destinationRepository = destinationRepository;
-     //   _syncErrorRepository = syncErrorRepository;
+        _syncErrorRepository = syncErrorRepository;
         _retryPolicy = retryPolicy;
         _options = options.Value;
         _logger = logger;

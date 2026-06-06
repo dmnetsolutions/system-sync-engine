@@ -16,6 +16,7 @@ builder.Services.AddSingleton<ISourceSystemClient, FakeSourceSystemClient>();
 builder.Services.AddSingleton<IDestinationRepository, SqliteDestinationRepository>();
 builder.Services.AddSingleton<ISyncStateRepository, SqliteSyncStateRepository>();
 builder.Services.AddSingleton<ISyncRunRepository, SqliteSyncRunRepository>();
+builder.Services.AddSingleton<ISyncErrorRepository, SqliteSyncErrorRepository>();
 builder.Services.AddSingleton<IRetryPolicy, SimpleRetryPolicy>();
 builder.Services.AddSingleton<CustomerSyncService>();
 

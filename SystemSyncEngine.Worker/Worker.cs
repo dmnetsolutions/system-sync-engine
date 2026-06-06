@@ -9,6 +9,7 @@ public sealed class Worker : BackgroundService
 {
     private readonly SyncEngineOptions _options;
     private readonly ISyncRunRepository _syncRunRepository;
+    private readonly ISyncErrorRepository _syncErrorRepository;
     private readonly CustomerSyncService _customerSyncService;
     private readonly IDestinationRepository _destinationRepository;
     private readonly ISyncStateRepository _syncStateRepository;
@@ -20,6 +21,7 @@ public sealed class Worker : BackgroundService
         IDestinationRepository destinationRepository,
         ISyncStateRepository syncStateRepository,
         ISyncRunRepository syncRunRepository,
+        ISyncErrorRepository syncErrorRepository,
         IHostApplicationLifetime applicationLifetime,
         IOptions<SyncEngineOptions> options,
         ILogger<Worker> logger)
@@ -27,6 +29,7 @@ public sealed class Worker : BackgroundService
         _customerSyncService = customerSyncService;
         _destinationRepository = destinationRepository;
         _syncRunRepository = syncRunRepository;
+        _syncErrorRepository = syncErrorRepository;
         _syncStateRepository = syncStateRepository;
         _applicationLifetime = applicationLifetime;
         _options = options.Value;
@@ -110,6 +113,11 @@ public sealed class Worker : BackgroundService
         if (_syncRunRepository is SqliteSyncRunRepository sqliteSyncRunRepository)
         {
             await sqliteSyncRunRepository.InitializeAsync(cancellationToken);
+        }
+
+        if (_syncErrorRepository is SqliteSyncErrorRepository sqliteSyncErrorRepository)
+        {
+            await sqliteSyncErrorRepository.InitializeAsync(cancellationToken);
         }
 
         if (_destinationRepository is SqliteDestinationRepository sqliteDestinationRepository)
