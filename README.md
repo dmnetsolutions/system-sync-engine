@@ -1,54 +1,51 @@
 # System Sync Engine
 
-A .NET worker-service prototype for synchronizing data between systems using a clean, extensible architecture.
+A production-style .NET Worker Service prototype that syncs customer data from a source system into a relational database with retries, validation, checkpointing, audit history, and failed-record tracking.
 
-The goal of this project is to demonstrate a practical integration pattern for moving, transforming, validating, and logging data between source and target systems.
+## Business Use Case
 
-## Purpose
+Many businesses need to move data between systems such as CRMs, ERPs, billing platforms, vendor APIs, spreadsheets, and internal databases.
 
-Many business systems need lightweight synchronization between databases, APIs, files, or third-party platforms. This project provides a starter framework for building that kind of sync process in a maintainable way.
+This prototype demonstrates a reliable backend sync pattern for:
 
-Example use cases:
-
-- Sync records from one system to another
-- Poll an external API and update a local database
-- Import files from a folder and push data to an API
-- Move data between SQL Server, Oracle, REST APIs, or cloud services
-- Add validation, retry handling, and structured logging around integration workflows
+- API-to-database integrations
+- CRM/customer data synchronization
+- ETL-style business automation
+- scheduled background data jobs
+- failed-record auditing and retry-safe processing
 
 ## Tech Stack
 
-- .NET 10
+- .NET 10 Worker Service
 - C#
-- Worker Service
-- Dependency Injection
-- Structured logging
-- Configuration-based execution
+- SQLite
+- Microsoft.Extensions.Hosting
+- Microsoft.Extensions.Configuration
+- Microsoft.Extensions.Logging
 
-## Project Goals
+## Features
 
-This prototype is intended to show:
+- Pulls updated customer records from a source system abstraction
+- Validates required fields before writing
+- Normalizes data before persistence
+- Performs idempotent upserts into SQLite
+- Saves sync checkpoints to avoid duplicate processing
+- Stores failed/skipped records in a SyncErrors table
+- Stores durable run history in a SyncRuns table
+- Uses configurable retry behavior
+- Uses appsettings.json for runtime configuration
 
-- Clean separation of sync responsibilities
-- Extensible source and destination adapters
-- Testable business logic
-- Config-driven behavior
-- Practical error handling and logging
-- A foundation for scheduled or continuously running background processes
-
-## Architecture
-
-The solution is organized around a simple sync pipeline:
+## Current Flow
 
 ```text
 Source System
     ↓
-Read / Extract
+CustomerSyncService
     ↓
-Validate
+Validation / Normalization
     ↓
-Transform
+Retry Policy
     ↓
-Write / Load
+SQLite Destination Repository
     ↓
-Log Result
+Sync State / Sync Errors / Sync Run History

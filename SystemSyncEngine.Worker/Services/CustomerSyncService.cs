@@ -1,4 +1,6 @@
 ﻿using SystemSyncEngine.Worker.Models;
+using Microsoft.Extensions.Options;
+using SystemSyncEngine.Worker.Options;
 
 namespace SystemSyncEngine.Worker.Services;
 
@@ -6,15 +8,24 @@ public sealed class CustomerSyncService
 {
     private readonly ISourceSystemClient _sourceClient;
     private readonly IDestinationRepository _destinationRepository;
+    private readonly SyncEngineOptions _options;
+    private readonly ISyncErrorRepository _syncErrorRepository;
     private readonly ILogger<CustomerSyncService> _logger;
+    private readonly IRetryPolicy _retryPolicy;
 
     public CustomerSyncService(
-        ISourceSystemClient sourceClient,
-        IDestinationRepository destinationRepository,
-        ILogger<CustomerSyncService> logger)
+    ISourceSystemClient sourceClient,
+    IDestinationRepository destinationRepository,
+    ISyncErrorRepository syncErrorRepository,
+    IRetryPolicy retryPolicy,
+    IOptions<SyncEngineOptions> options,
+    ILogger<CustomerSyncService> logger)
     {
         _sourceClient = sourceClient;
         _destinationRepository = destinationRepository;
+        _syncErrorRepository = syncErrorRepository;
+        _retryPolicy = retryPolicy;
+        _options = options.Value;
         _logger = logger;
     }
 
@@ -22,9 +33,10 @@ public sealed class CustomerSyncService
         DateTime sinceUtc,
         CancellationToken cancellationToken)
     {
-        var sourceCustomers = await _sourceClient.GetUpdatedCustomersAsync(
-            sinceUtc,
-            cancellationToken);
+        var sourceCustomers = await _retryPolicy.ExecuteAsync(
+                                                token => _sourceClient.GetUpdatedCustomersAsync(sinceUtc, token),
+                                                            "Fetch updated customers from source system",
+                                                            cancellationToken);
 
         var recordsWritten = 0;
         var recordsSkipped = 0;
@@ -54,9 +66,10 @@ public sealed class CustomerSyncService
                     SyncedAtUtc = DateTime.UtcNow
                 };
 
-                await _destinationRepository.UpsertCustomerAsync(
-                    customerRecord,
-                    cancellationToken);
+                await _retryPolicy.ExecuteAsync(
+                        token => _destinationRepository.UpsertCustomerAsync(customerRecord, token),
+                                    $"Upsert customer {customerRecord.ExternalId}",
+                                    cancellationToken);
 
                 recordsWritten++;
             }
@@ -74,7 +87,7 @@ public sealed class CustomerSyncService
         return new SyncResult
         {
             RecordsRead = sourceCustomers.Count,
-            RecordsWritten = recordsWritten,
+            RecordsUpserted = recordsWritten,
             RecordsSkipped = recordsSkipped,
             RecordsFailed = recordsFailed
         };

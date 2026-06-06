@@ -3,7 +3,7 @@
 public sealed class SyncResult
 {
     public int RecordsRead { get; init; }
-    public int RecordsWritten { get; init; }
+    public int RecordsUpserted { get; init; }
     public int RecordsSkipped { get; init; }
     public int RecordsFailed { get; init; }
 
